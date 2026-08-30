@@ -1,6 +1,6 @@
 import os
 import tempfile
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from openai import OpenAI
@@ -11,15 +11,11 @@ client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 class SpeakRequest(BaseModel):
     text: str
 
-@app.get("/health")
-def health():
-    return {"ok": True}
 
-@app.post("/speak")
-def speak(req: SpeakRequest):
+def make_speech(text: str):
     if not os.environ.get("OPENAI_API_KEY"):
         raise HTTPException(status_code=500, detail="OPENAI_API_KEY is not configured")
-    if not req.text.strip():
+    if not text.strip():
         raise HTTPException(status_code=400, detail="text is required")
 
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
@@ -28,7 +24,7 @@ def speak(req: SpeakRequest):
     with client.audio.speech.with_streaming_response.create(
         model="gpt-4o-mini-tts",
         voice="coral",
-        input=req.text,
+        input=text,
         instructions=(
             "Speak like a warm, natural conversational assistant for an older adult. "
             "Use a comfortable normal pace, clear pronunciation, short pauses, and a friendly tone. "
@@ -42,5 +38,20 @@ def speak(req: SpeakRequest):
         tmp.name,
         media_type="audio/mpeg",
         filename="carebot_voice.mp3",
-        background=None
+        background=None,
     )
+
+
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+
+@app.post("/speak")
+def speak(req: SpeakRequest):
+    return make_speech(req.text)
+
+
+@app.get("/speak")
+def speak_get(text: str = Query(..., min_length=1)):
+    return make_speech(text)
